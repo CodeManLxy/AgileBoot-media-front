@@ -6,16 +6,28 @@ import { ElMessageBox, Sort } from "element-plus";
 import { type PaginationProps } from "@pureadmin/table";
 import { CommonUtils } from "@/utils/common";
 import { AddGroupRequest } from "../utils/grouptypes";
+import { isString, isEmpty } from "@pureadmin/utils";
+import { useMultiTagsStoreHook } from "@/store/modules/multiTags";
 import {
   GroupQuery,
   getGroupList,
   addGroupApi,
   CosGroupRequest,
-  updateGroupApi
+  updateGroupApi,
+  deleteSystemNoticeApi
 } from "@/api/system/group";
 import { reactive, ref, onMounted, h, toRaw } from "vue";
+import {
+  useRouter,
+  useRoute,
+  type LocationQueryRaw,
+  type RouteParamsRaw
+} from "vue-router";
 
 export function useGroup() {
+  const route = useRoute();
+  const router = useRouter();
+  const getParameter = isEmpty(route.params) ? route.query : route.params;
   const defaultSort: Sort = {
     prop: "createTime",
     order: "descending"
@@ -23,6 +35,7 @@ export function useGroup() {
   const formRef = ref();
   const dataList = ref([]);
   const pageLoading = ref(true);
+  const multipleSelection = ref([]);
   const pagination: PaginationProps = {
     total: 0,
     pageSize: 10,
@@ -83,8 +96,42 @@ export function useGroup() {
       sortable: "custom",
       formatter: ({ createTime }) =>
         dayjs(createTime).format("YYYY-MM-DD HH:mm:ss")
+    },
+    {
+      label: "操作",
+      fixed: "right",
+      width: 240,
+      slot: "operation"
     }
   ];
+
+  function detail(
+    parameter: LocationQueryRaw | RouteParamsRaw,
+    model: "query" | "params"
+  ) {
+    Object.keys(parameter).forEach(param => {
+      if (!isString(parameter[param])) {
+        parameter[param] = parameter[param].toString();
+      }
+    });
+    if (model === "params") {
+      useMultiTagsStoreHook().handleTags("push", {
+        path: `/system/cos/media:group_id`,
+        name: "SystemCosMedia",
+        params: parameter,
+        meta: {
+          title: {
+            zh: `No.${parameter.id} - 详情信息`,
+            en: `No.${parameter.id} - DetailInfo`
+          }
+        }
+      });
+    }
+    router.push({ name: "SystemCosMedia", params: parameter });
+  }
+  const initToDetail = (model: "query" | "params") => {
+    if (getParameter) detail(getParameter, model);
+  };
   function openDialog(title = "新增", row?: AddGroupRequest) {
     addDialog({
       title: `${title}组`,
@@ -157,6 +204,49 @@ export function useGroup() {
     pagination.total = data.total;
   }
 
+  async function handleDelete(row) {
+    await deleteSystemNoticeApi([row.noticeId]).then(() => {
+      message(`您删除了通知标题为${row.name}的这条数据`, { type: "success" });
+      // 刷新列表
+      getGroupTable();
+    });
+  }
+
+  async function handleBulkDelete(tableRef) {
+    if (multipleSelection.value.length === 0) {
+      message("请选择需要删除的数据", { type: "warning" });
+      return;
+    }
+
+    ElMessageBox.confirm(
+      `确认要<strong>删除</strong>编号为<strong style='color:var(--el-color-primary)'>[ ${multipleSelection.value} ]</strong>的通知吗?`,
+      "系统提示",
+      {
+        confirmButtonText: "确定",
+        cancelButtonText: "取消",
+        type: "warning",
+        dangerouslyUseHTMLString: true,
+        draggable: true
+      }
+    )
+      .then(async () => {
+        await deleteSystemNoticeApi(multipleSelection.value).then(() => {
+          message(`您删除了通知编号为[ ${multipleSelection.value} ]的数据`, {
+            type: "success"
+          });
+          // 刷新列表
+          getGroupTable();
+        });
+      })
+      .catch(() => {
+        message("取消删除", {
+          type: "info"
+        });
+        // 清空checkbox选择的数据
+        tableRef.getTableRef().clearSelection();
+      });
+  }
+
   function doSearch() {
     // 点击搜索的时候 需要重置分页
     pagination.currentPage = 1;
@@ -174,6 +264,7 @@ export function useGroup() {
     // 重置分页并查询
     doSearch();
   }
+
   onMounted(() => {
     getGroupTable();
   });
@@ -187,6 +278,13 @@ export function useGroup() {
     tableColumns,
     pageLoading,
     defaultSort,
-    pagination
+    pagination,
+    handleBulkDelete,
+    multipleSelection,
+    handleDelete,
+    detail,
+    initToDetail,
+    getParameter,
+    router
   };
 }

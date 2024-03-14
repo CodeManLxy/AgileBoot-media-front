@@ -3,7 +3,6 @@ import { ref } from "vue";
 import { useGroup } from "./utils/api.tsx";
 import { PureTableBar } from "@/components/RePureTableBar";
 import { useRenderIcon } from "@/components/ReIcon/src/hooks";
-
 // import Database from "@iconify-icons/ri/database-2-line";
 // import More from "@iconify-icons/ep/more-filled";
 import Delete from "@iconify-icons/ep/delete";
@@ -34,7 +33,12 @@ const {
   defaultSort,
   pagination,
   pageLoading,
-  openDialog
+  openDialog,
+  multipleSelection,
+  handleBulkDelete,
+  handleDelete,
+  detail,
+  router
 } = useGroup();
 </script>
 
@@ -119,7 +123,23 @@ const {
             rows => (multipleSelection = rows.map(item => item.id))
           "
         >
+          <!--  @click="detail({ id: row.id }, 'params')" -->
           <template #operation="{ row }">
+            <el-button
+              class="reset-margin"
+              link
+              type="primary"
+              :size="size"
+              :icon="useRenderIcon(EditPen)"
+              @click="
+                router.push({
+                  name: 'SystemCosMedia',
+                  query: { text: row.id }
+                })
+              "
+            >
+              查看详情
+            </el-button>
             <el-button
               class="reset-margin"
               link
